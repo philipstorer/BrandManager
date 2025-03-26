@@ -12,7 +12,6 @@ def local_css(file_name):
     with open(file_name) as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# Load the CSS file (ensure static/style.css exists)
 if os.path.exists("static/style.css"):
     local_css("static/style.css")
 
@@ -39,12 +38,12 @@ def load_criteria(filename):
             st.error(f"Excel file has only {df.shape[1]} columns but at least 13 are required. Check file formatting.")
             return None, None, None, None
         # Extract options:
-        role_options = df.columns[1:4].tolist()  # B–D
+        role_options = df.columns[1:4].tolist()  # Cells B-D
         # Remove "Caregiver" (case-insensitive)
         role_options = [opt for opt in role_options if opt.lower() != "caregiver"]
-        lifecycle_options = df.columns[5:9].tolist()  # F–I
-        journey_options = df.columns[9:13].tolist()   # J–M
-        matrix_df = df.copy()  # Use the entire sheet as our matrix.
+        lifecycle_options = df.columns[5:9].tolist()  # Cells F-I
+        journey_options = df.columns[9:13].tolist()   # Cells J-M
+        matrix_df = df.copy()
         return role_options, lifecycle_options, journey_options, matrix_df
     except Exception as e:
         st.error(f"Error reading the Excel file (Sheet1): {e}")
@@ -54,9 +53,7 @@ role_options, lifecycle_options, journey_options, matrix_df = load_criteria("tes
 if any(v is None for v in [role_options, lifecycle_options, journey_options, matrix_df]):
     st.stop()
 
-# -----------------------
-# Define Placeholders and Sample Disease States
-# -----------------------
+# Define placeholders and a sample list for Disease State.
 role_placeholder = "Audience"
 lifecycle_placeholder = "Product Life Cycle"
 journey_placeholder = "Customer Journey Focus"
@@ -66,7 +63,7 @@ role_dropdown_options = [role_placeholder] + role_options
 lifecycle_dropdown_options = [lifecycle_placeholder] + lifecycle_options
 journey_dropdown_options = [journey_placeholder] + journey_options
 
-# Sample list of disease states (update as needed)
+# Sample disease state list (update as needed)
 disease_states = [
     "Diabetes", "Hypertension", "Asthma", "Depression", "Arthritis",
     "Alzheimer's", "COPD", "Obesity", "Cancer", "Stroke"
@@ -116,7 +113,6 @@ Return ONLY a JSON object with exactly the following keys: "description", "cost"
                 temperature=0.7,
             )
         content = response.choices[0].message.content.strip()
-        # Extract JSON using regex to discard extra text.
         match = re.search(r'\{.*\}', content, re.DOTALL)
         if match:
             json_str = match.group(0)
@@ -136,16 +132,16 @@ Return ONLY a JSON object with exactly the following keys: "description", "cost"
 # -----------------------
 # Build the Streamlit Interface
 # -----------------------
+
 st.title("Pharma AI Brand Manager")
 
-# Step 1: Criteria Selection (only Step 1 is shown initially)
+# Step 1: Criteria Selection
 st.header("Step 1: Select Your Criteria")
 role_selected = st.selectbox("", role_dropdown_options)
 lifecycle_selected = st.selectbox("", lifecycle_dropdown_options)
 journey_selected = st.selectbox("", journey_dropdown_options)
 disease_selected = st.selectbox("", disease_dropdown_options)
 
-# Only proceed if all Step 1 fields are valid.
 if (role_selected != role_placeholder and lifecycle_selected != lifecycle_placeholder 
     and journey_selected != journey_placeholder and disease_selected != disease_placeholder):
     
@@ -157,7 +153,6 @@ if (role_selected != role_placeholder and lifecycle_selected != lifecycle_placeh
     else:
         selected_strategics = st.multiselect("Select up to 3 Strategic Imperatives", options=strategic_options, max_selections=3)
     
-    # Only proceed if at least one strategic imperative is selected.
     if selected_strategics and len(selected_strategics) > 0:
         # Step 3: Product Differentiators Selection
         st.header("Step 3: Select Product Differentiators")
@@ -172,22 +167,17 @@ if (role_selected != role_placeholder and lifecycle_selected != lifecycle_placeh
         product_diff_options = sheet2["Differentiator"].dropna().unique().tolist()
         selected_differentiators = st.multiselect("Select up to 3 Product Differentiators", options=product_diff_options, max_selections=3)
         
-        # Only proceed if at least one product differentiator is selected.
         if selected_differentiators and len(selected_differentiators) > 0:
-            # Display additional CTA buttons (they don't need to function yet).
+            # Additional CTA Buttons: Create a row of 4 buttons with unique keys.
             st.markdown("### Additional Actions")
             col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.button("Generate Strategic Plan")
-            with col2:
-                st.button("Competitive Landscape")
-            with col3:
-                st.button("Generate Campaign")
-            with col4:
-                st.button("Generate Messaging")
+            gen_plan_pressed = col1.button("Generate Strategic Plan", key="gen_plan")
+            comp_landscape_pressed = col2.button("Competitive Landscape", key="comp_landscape")
+            gen_campaign_pressed = col3.button("Generate Campaign", key="gen_campaign")
+            gen_messaging_pressed = col4.button("Generate Messaging", key="gen_messaging")
             
-            # When the "Generate Strategic Plan" button is pressed, generate tactical recommendations.
-            if st.button("Generate Strategic Plan"):
+            # Only proceed with generating tactical recommendations if "Generate Strategic Plan" is pressed.
+            if gen_plan_pressed:
                 st.header("Tactical Recommendations")
                 try:
                     sheet3 = pd.read_excel("test.xlsx", sheet_name=2, header=0)
@@ -204,7 +194,6 @@ if (role_selected != role_placeholder and lifecycle_selected != lifecycle_placeh
                     if row.empty:
                         st.info(f"No tactic found for strategic imperative: {imperative}")
                         continue
-                    # Choose tactic based on user role.
                     if role_selected == "HCP":
                         tactic = row["HCP Engagement"].iloc[0]
                     else:
