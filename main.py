@@ -4,14 +4,7 @@ import openai
 import json
 import os
 
-# -----------------------
-# Debug: Print Current Working Directory
-# -----------------------
-st.write("Current working directory:", os.getcwd())
-
-# -----------------------
 # Secure API Key Handling
-# -----------------------
 if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
     openai.api_key = st.secrets["openai"]["api_key"]
 else:
@@ -21,30 +14,26 @@ else:
         st.stop()
     openai.api_key = openai_api_key
 
-# -----------------------
-# Load Excel Data from Sheet1 (Criteria) from test.xlsx
-# -----------------------
+# Load Excel Data from Sheet1 (Criteria)
 @st.cache_data
 def load_excel_data(filename):
     try:
-        # Read columns A through M from Sheet1 using header row 0
+        # Read columns A through M from Sheet1
         raw_df = pd.read_excel(filename, sheet_name=0, header=0, usecols="A:M")
-        st.write("Data shape (rows, columns):", raw_df.shape)
         if raw_df.shape[1] < 13:
             st.error(f"Excel file has only {raw_df.shape[1]} column(s) but at least 13 are required. Check file formatting.")
             return None, None, None, None
 
-        # Extract selection options based on header names:
-        # Role options: cells B1 to D1 → columns index 1 to 3
+        # Extract selection options:
+        # Role options: columns B to D (indices 1 to 3)
         role_options = raw_df.columns[1:4].tolist()
-        # Lifecycle options: cells F1 to I1 → columns index 5 to 8
+        # Lifecycle options: columns F to I (indices 5 to 8)
         lifecycle_options = raw_df.columns[5:9].tolist()
-        # Journey options: cells J1 to M1 → columns index 9 to 12
+        # Journey options: columns J to M (indices 9 to 12)
         journey_options = raw_df.columns[9:13].tolist()
 
-        # The matrix data (strategic imperatives and "x" marks) are in the entire DataFrame
+        # The entire DataFrame (Sheet1) is used as the matrix.
         matrix_df = raw_df.copy()
-
         return role_options, lifecycle_options, journey_options, matrix_df
     except Exception as e:
         st.error(f"Error reading the Excel file: {e}")
@@ -54,18 +43,11 @@ role_options, lifecycle_options, journey_options, matrix_df = load_excel_data("t
 if role_options is None or lifecycle_options is None or journey_options is None or matrix_df is None:
     st.stop()
 
-# Debug: Display the extracted selection options
-st.write("Role Options:", role_options)
-st.write("Lifecycle Options:", lifecycle_options)
-st.write("Journey Options:", journey_options)
-
-# -----------------------
 # Helper Functions
-# -----------------------
 def filter_strategic_imperatives(df, role, lifecycle, journey):
     """
-    Filters the matrix (df) for strategic imperatives for which the cells in the
-    selected role, lifecycle, and journey columns contain an "x" (case-insensitive).
+    Filters the matrix (df) for strategic imperatives for which the selected role,
+    lifecycle, and journey columns all contain an "x" (case-insensitive).
     Assumes that one of the columns in df is labeled "Strategic Imperative".
     """
     if role not in df.columns or lifecycle not in df.columns or journey not in df.columns:
@@ -118,9 +100,8 @@ Return the output as a JSON object with keys "description", "cost", and "timefra
         st.error(f"Error generating AI output: {e}")
         return {"description": "N/A", "cost": "N/A", "timeframe": "N/A"}
 
-# -----------------------
 # Build the Streamlit Interface
-# -----------------------
+
 st.title("Pharma Strategy Online Tool")
 
 # Step 1: Criteria Selection
@@ -139,12 +120,12 @@ else:
 
 # Step 3: Product Differentiators
 st.header("Step 3: Select Product Differentiators")
-# Load Sheet2 (assumed to have a column "Product Differentiators")
+# Load Sheet2 (assumed to have columns "Category" and "Differentiator")
 sheet2 = pd.read_excel("test.xlsx", sheet_name=1, header=0)
-if "Product Differentiators" not in sheet2.columns:
-    st.error("Sheet2 must have a column named 'Product Differentiators'.")
+if "Differentiator" not in sheet2.columns:
+    st.error("Sheet2 must have a column named 'Differentiator'.")
     st.stop()
-product_diff_options = sheet2["Product Differentiators"].dropna().unique().tolist()
+product_diff_options = sheet2["Differentiator"].dropna().unique().tolist()
 selected_differentiators = st.multiselect("Select up to 3 Product Differentiators", options=product_diff_options, max_selections=3)
 
 # Generate and Display Results
