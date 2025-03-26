@@ -24,11 +24,11 @@ def load_criteria(filename):
             st.error(f"Excel file has only {df.shape[1]} column(s) but at least 13 are required. Check file formatting.")
             return None, None, None, None
         # Extract selection options from header row:
-        # Role options: columns B to D (indices 1-3)
+        # Role options: columns B to D (indices 1 to 3)
         role_options = df.columns[1:4].tolist()
-        # Lifecycle options: columns F to I (indices 5-8)
+        # Lifecycle options: columns F to I (indices 5 to 8)
         lifecycle_options = df.columns[5:9].tolist()
-        # Journey options: columns J to M (indices 9-12)
+        # Journey options: columns J to M (indices 9 to 12)
         journey_options = df.columns[9:13].tolist()
         # The entire sheet is used as the matrix
         matrix_df = df.copy()
