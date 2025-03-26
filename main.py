@@ -4,7 +4,9 @@ import openai
 import json
 import os
 
+# -----------------------
 # Secure API Key Handling
+# -----------------------
 if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
     openai.api_key = st.secrets["openai"]["api_key"]
 else:
@@ -14,34 +16,47 @@ else:
         st.stop()
     openai.api_key = openai_api_key
 
-# Load Excel Data from Sheet1 (Criteria)
+# -----------------------
+# Load Criteria from Sheet1 (A–M)
+# -----------------------
 @st.cache_data
 def load_criteria(filename):
     try:
-        # Read columns A through M from Sheet1 using header row 0
+        # Read columns A through M from Sheet1 using header row 0.
         df = pd.read_excel(filename, sheet_name=0, header=0, usecols="A:M")
         if df.shape[1] < 13:
             st.error(f"Excel file has only {df.shape[1]} column(s) but at least 13 are required. Check file formatting.")
             return None, None, None, None
-        # Extract selection options from header row:
-        # Role options: columns B to D (indices 1 to 3)
+        # Extract options from the header row:
+        # Role options: columns B-D (indices 1-3)
         role_options = df.columns[1:4].tolist()
-        # Lifecycle options: columns F to I (indices 5 to 8)
+        # Lifecycle options: columns F-I (indices 5-8)
         lifecycle_options = df.columns[5:9].tolist()
-        # Journey options: columns J to M (indices 9 to 12)
+        # Journey options: columns J-M (indices 9-12)
         journey_options = df.columns[9:13].tolist()
-        # The entire sheet is used as the matrix
-        matrix_df = df.copy()
+        matrix_df = df.copy()  # The entire sheet is our matrix.
         return role_options, lifecycle_options, journey_options, matrix_df
     except Exception as e:
         st.error(f"Error reading the Excel file (Sheet1): {e}")
         return None, None, None, None
 
+# Load criteria and matrix from test.xlsx
 role_options, lifecycle_options, journey_options, matrix_df = load_criteria("test.xlsx")
 if any(v is None for v in [role_options, lifecycle_options, journey_options, matrix_df]):
     st.stop()
 
-# Helper: Filter Strategic Imperatives from the matrix (Sheet1)
+# Prepend placeholders to dropdown option lists.
+role_placeholder = "Audience"
+lifecycle_placeholder = "Product Life Cycle"
+journey_placeholder = "Customer Journey Focus"
+
+new_role_options = [role_placeholder] + role_options
+new_lifecycle_options = [lifecycle_placeholder] + lifecycle_options
+new_journey_options = [journey_placeholder] + journey_options
+
+# -----------------------
+# Helper: Filter Strategic Imperatives from Sheet1 Matrix
+# -----------------------
 def filter_strategic_imperatives(df, role, lifecycle, journey):
     """
     Filters the matrix (df) for strategic imperatives where the cells in the
@@ -62,24 +77,28 @@ def filter_strategic_imperatives(df, role, lifecycle, journey):
         st.error(f"Error filtering strategic imperatives: {e}")
         return []
 
-# Helper: Generate AI Output using OpenAI API
+# -----------------------
+# Helper: Generate Tactical Recommendation Output
+# -----------------------
 def generate_ai_output(tactic_text, selected_differentiators):
     """
-    Uses the OpenAI API to generate a 2-3 sentence description of the tactic,
-    along with an estimated cost range and timeframe.
+    Uses the OpenAI API (gpt-3.5-turbo) to generate a 2-3 sentence description of the tactic.
+    The prompt instructs the model to describe how implementing this tactic will deliver on the strategic imperative,
+    integrating the product differentiators.
     Returns a dictionary with keys "description", "cost", and "timeframe".
     """
     differentiators_text = ", ".join(selected_differentiators) if selected_differentiators else "None"
     prompt = f"""
 You are an expert pharmaceutical marketing strategist.
 Given the following tactic: "{tactic_text}"
-and the selected product differentiators: "{differentiators_text}",
-please provide a short 2-3 sentence description of the tactic.
+and considering the selected product differentiators: "{differentiators_text}",
+explain in 2-3 sentences how implementing this tactic will deliver on the strategic imperative,
+highlighting how its unique aspects align with and leverage the product differentiators to achieve strategic goals.
 Also, provide an estimated cost range in USD and an estimated timeframe in months for implementation.
-Return the output as a JSON object with keys "description", "cost", and "timeframe".
+Return the answer as a JSON object with keys "description", "cost", and "timeframe".
     """
     try:
-        with st.spinner("Generating AI output..."):
+        with st.spinner("Generating tactical recommendation..."):
             response = openai.ChatCompletion.create(
                 model="gpt-3.5-turbo",
                 messages=[
@@ -92,82 +111,85 @@ Return the output as a JSON object with keys "description", "cost", and "timefra
         try:
             output = json.loads(content)
         except json.JSONDecodeError:
-            st.error("Error decoding AI response. Please try again.")
+            st.error("Error decoding the response. Please try again.")
             output = {"description": "N/A", "cost": "N/A", "timeframe": "N/A"}
         return output
     except Exception as e:
-        st.error(f"Error generating AI output: {e}")
+        st.error(f"Error generating tactical recommendation: {e}")
         return {"description": "N/A", "cost": "N/A", "timeframe": "N/A"}
 
+# -----------------------
 # Build the Streamlit Interface
+# -----------------------
 
-st.title("Pharma Strategy Online Tool")
+st.title("Pharma AI Brand Manager")
 
 # Step 1: Criteria Selection
 st.header("Step 1: Select Your Criteria")
-role_selected = st.selectbox("Select your role", role_options)
-lifecycle_selected = st.selectbox("Select the product lifecycle stage", lifecycle_options)
-journey_selected = st.selectbox("Select the customer journey focus", journey_options)
+role_selected = st.selectbox("", new_role_options)
+lifecycle_selected = st.selectbox("", new_lifecycle_options)
+journey_selected = st.selectbox("", new_journey_options)
 
-# Step 2: Strategic Imperatives Selection
-st.header("Step 2: Select Strategic Imperatives")
-strategic_options = filter_strategic_imperatives(matrix_df, role_selected, lifecycle_selected, journey_selected)
-if not strategic_options:
-    st.warning("No strategic imperatives found for these selections. Please try different options.")
-else:
-    selected_strategics = st.multiselect("Select up to 3 Strategic Imperatives", options=strategic_options, max_selections=3)
-
-# Step 3: Product Differentiators Selection
-st.header("Step 3: Select Product Differentiators")
-try:
-    sheet2 = pd.read_excel("test.xlsx", sheet_name=1, header=0)
-except Exception as e:
-    st.error(f"Error reading Sheet2: {e}")
-    st.stop()
-if "Differentiator" not in sheet2.columns:
-    st.error("Sheet2 must have a column named 'Differentiator'.")
-    st.stop()
-product_diff_options = sheet2["Differentiator"].dropna().unique().tolist()
-selected_differentiators = st.multiselect("Select up to 3 Product Differentiators", options=product_diff_options, max_selections=3)
-
-# Step 4: Generate Tactical Recommendations based on Sheet3
-if st.button("Generate Strategy"):
-    if not selected_strategics:
-        st.error("Please select at least one strategic imperative.")
+# Only show further steps if all three selections are valid.
+if role_selected != role_placeholder and lifecycle_selected != lifecycle_placeholder and journey_selected != journey_placeholder:
+    # Step 2: Strategic Imperatives Selection
+    st.header("Step 2: Select Strategic Imperatives")
+    strategic_options = filter_strategic_imperatives(matrix_df, role_selected, lifecycle_selected, journey_selected)
+    if not strategic_options:
+        st.warning("No strategic imperatives found for these selections. Please try different options.")
     else:
-        st.header("Tactical Recommendations")
+        selected_strategics = st.multiselect("Select up to 3 Strategic Imperatives", options=strategic_options, max_selections=3)
+
+    # Only show Step 3 if at least one strategic imperative is selected.
+    if selected_strategics and len(selected_strategics) > 0:
+        st.header("Step 3: Select Product Differentiators")
         try:
-            sheet3 = pd.read_excel("test.xlsx", sheet_name=2, header=0)
+            sheet2 = pd.read_excel("test.xlsx", sheet_name=1, header=0)
         except Exception as e:
-            st.error(f"Error reading Sheet3: {e}")
+            st.error(f"Error reading Sheet2: {e}")
             st.stop()
-        # Ensure Sheet3 has the required columns
-        required_cols = ["Strategic Imperative", "Patient & Caregiver", "HCP Engagement"]
-        if not all(col in sheet3.columns for col in required_cols):
-            st.error("Sheet3 must have columns named 'Strategic Imperative', 'Patient & Caregiver', and 'HCP Engagement'.")
+        if "Differentiator" not in sheet2.columns:
+            st.error("Sheet2 must have a column named 'Differentiator'.")
             st.stop()
-        
-        # For each selected strategic imperative, pull the appropriate tactic
-        for imperative in selected_strategics:
-            row = sheet3[sheet3["Strategic Imperative"] == imperative]
-            if row.empty:
-                st.info(f"No tactic found for strategic imperative: {imperative}")
-                continue
-            # Determine the tactic based on role selection
-            if role_selected == "HCP":
-                tactic = row["HCP Engagement"].iloc[0]
-            else:
-                tactic = row["Patient & Caregiver"].iloc[0]
-            
-            # Optionally customize with product differentiators
-            if selected_differentiators:
-                tactic_customized = f"{tactic} (Customized with: {', '.join(selected_differentiators)})"
-            else:
-                tactic_customized = tactic
-            
-            # Generate AI output for this tactic
-            ai_output = generate_ai_output(tactic_customized, selected_differentiators)
-            st.subheader(f"{imperative}: {tactic_customized}")
-            st.write(ai_output.get("description", "No description available."))
-            st.write(f"**Estimated Cost:** {ai_output.get('cost', 'N/A')}")
-            st.write(f"**Estimated Timeframe:** {ai_output.get('timeframe', 'N/A')}")
+        product_diff_options = sheet2["Differentiator"].dropna().unique().tolist()
+        selected_differentiators = st.multiselect("Select up to 3 Product Differentiators", options=product_diff_options, max_selections=3)
+
+        # Only show the CTA if at least one product differentiator is selected.
+        if selected_differentiators and len(selected_differentiators) > 0:
+            if st.button("Generate Strategic Plan"):
+                st.header("Tactical Recommendations")
+                try:
+                    sheet3 = pd.read_excel("test.xlsx", sheet_name=2, header=0)
+                except Exception as e:
+                    st.error(f"Error reading Sheet3: {e}")
+                    st.stop()
+                required_cols = ["Strategic Imperative", "Patient & Caregiver", "HCP Engagement"]
+                if not all(col in sheet3.columns for col in required_cols):
+                    st.error("Sheet3 must have columns named 'Strategic Imperative', 'Patient & Caregiver', and 'HCP Engagement'.")
+                    st.stop()
+
+                # For each selected strategic imperative, pull the appropriate tactic.
+                for imperative in selected_strategics:
+                    row = sheet3[sheet3["Strategic Imperative"] == imperative]
+                    if row.empty:
+                        st.info(f"No tactic found for strategic imperative: {imperative}")
+                        continue
+                    # Determine tactic based on user role.
+                    if role_selected == "HCP":
+                        tactic = row["HCP Engagement"].iloc[0]
+                    else:
+                        tactic = row["Patient & Caregiver"].iloc[0]
+
+                    # Generate the tactical recommendation using the selected differentiators.
+                    ai_output = generate_ai_output(tactic, selected_differentiators)
+                    # In the title, display only the imperative and tactic (without showing the raw differentiator text).
+                    st.subheader(f"{imperative}: {tactic}")
+                    st.write(ai_output.get("description", "No description available."))
+                    st.write(f"**Estimated Cost:** {ai_output.get('cost', 'N/A')}")
+                    st.write(f"**Estimated Timeframe:** {ai_output.get('timeframe', 'N/A')}")
+        else:
+            st.info("Please select at least one product differentiator to proceed.")
+    else:
+        st.info("Please select at least one strategic imperative to proceed.")
+else:
+    st.info("Please complete all criteria selections in Step 1 to proceed.")
