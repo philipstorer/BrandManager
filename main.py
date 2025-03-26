@@ -18,18 +18,19 @@ else:
 @st.cache_data
 def load_criteria(filename):
     try:
-        # Read columns A through M from Sheet1
+        # Read columns A through M from Sheet1 using header row 0
         df = pd.read_excel(filename, sheet_name=0, header=0, usecols="A:M")
         if df.shape[1] < 13:
             st.error(f"Excel file has only {df.shape[1]} column(s) but at least 13 are required. Check file formatting.")
             return None, None, None, None
-
-        # Extract selection options based on header names
-        role_options = df.columns[1:4].tolist()           # Cells B1 to D1
-        lifecycle_options = df.columns[5:9].tolist()        # Cells F1 to I1
-        journey_options = df.columns[9:13].tolist()         # Cells J1 to M1
-
-        # Use the entire DataFrame as the matrix (Sheet1)
+        # Extract selection options from header row:
+        # Role options: columns B to D (indices 1-3)
+        role_options = df.columns[1:4].tolist()
+        # Lifecycle options: columns F to I (indices 5-8)
+        lifecycle_options = df.columns[5:9].tolist()
+        # Journey options: columns J to M (indices 9-12)
+        journey_options = df.columns[9:13].tolist()
+        # The entire sheet is used as the matrix
         matrix_df = df.copy()
         return role_options, lifecycle_options, journey_options, matrix_df
     except Exception as e:
@@ -40,12 +41,12 @@ role_options, lifecycle_options, journey_options, matrix_df = load_criteria("tes
 if any(v is None for v in [role_options, lifecycle_options, journey_options, matrix_df]):
     st.stop()
 
-# Helper function: Filter Strategic Imperatives from Sheet1 Matrix
+# Helper: Filter Strategic Imperatives from the matrix (Sheet1)
 def filter_strategic_imperatives(df, role, lifecycle, journey):
     """
     Filters the matrix (df) for strategic imperatives where the cells in the
     selected role, lifecycle, and journey columns contain an "x" (case-insensitive).
-    Assumes a column labeled "Strategic Imperative" exists.
+    Assumes there is a column named "Strategic Imperative".
     """
     if role not in df.columns or lifecycle not in df.columns or journey not in df.columns:
         st.error("The Excel file's columns do not match the expected names for filtering.")
@@ -61,19 +62,19 @@ def filter_strategic_imperatives(df, role, lifecycle, journey):
         st.error(f"Error filtering strategic imperatives: {e}")
         return []
 
-# Generate AI Output using OpenAI API
+# Helper: Generate AI Output using OpenAI API
 def generate_ai_output(tactic_text, selected_differentiators):
     """
     Uses the OpenAI API to generate a 2-3 sentence description of the tactic,
     along with an estimated cost range and timeframe.
-    Returns a dictionary with keys: "description", "cost", and "timeframe".
+    Returns a dictionary with keys "description", "cost", and "timeframe".
     """
     differentiators_text = ", ".join(selected_differentiators) if selected_differentiators else "None"
     prompt = f"""
 You are an expert pharmaceutical marketing strategist.
 Given the following tactic: "{tactic_text}"
 and the selected product differentiators: "{differentiators_text}",
-please provide a short 2-3 sentence description of this strategic tactic.
+please provide a short 2-3 sentence description of the tactic.
 Also, provide an estimated cost range in USD and an estimated timeframe in months for implementation.
 Return the output as a JSON object with keys "description", "cost", and "timeframe".
     """
@@ -108,7 +109,7 @@ role_selected = st.selectbox("Select your role", role_options)
 lifecycle_selected = st.selectbox("Select the product lifecycle stage", lifecycle_options)
 journey_selected = st.selectbox("Select the customer journey focus", journey_options)
 
-# Step 2: Strategic Imperatives Selection (from Sheet1)
+# Step 2: Strategic Imperatives Selection
 st.header("Step 2: Select Strategic Imperatives")
 strategic_options = filter_strategic_imperatives(matrix_df, role_selected, lifecycle_selected, journey_selected)
 if not strategic_options:
@@ -116,9 +117,8 @@ if not strategic_options:
 else:
     selected_strategics = st.multiselect("Select up to 3 Strategic Imperatives", options=strategic_options, max_selections=3)
 
-# Step 3: Product Differentiators Selection (from Sheet2)
+# Step 3: Product Differentiators Selection
 st.header("Step 3: Select Product Differentiators")
-# Sheet2: Expecting columns "Category" and "Differentiator"
 try:
     sheet2 = pd.read_excel("test.xlsx", sheet_name=1, header=0)
 except Exception as e:
@@ -130,36 +130,36 @@ if "Differentiator" not in sheet2.columns:
 product_diff_options = sheet2["Differentiator"].dropna().unique().tolist()
 selected_differentiators = st.multiselect("Select up to 3 Product Differentiators", options=product_diff_options, max_selections=3)
 
-# Step 4: Generate and Display Tactical Recommendations (from Sheet3)
+# Step 4: Generate Tactical Recommendations based on Sheet3
 if st.button("Generate Strategy"):
     if not selected_strategics:
         st.error("Please select at least one strategic imperative.")
     else:
         st.header("Tactical Recommendations")
-        # Sheet3: Expecting columns "Strategic Imperative", "Patient & Caregiver", "HCP engagement"
         try:
             sheet3 = pd.read_excel("test.xlsx", sheet_name=2, header=0)
         except Exception as e:
             st.error(f"Error reading Sheet3: {e}")
             st.stop()
-        required_cols = ["Strategic Imperative", "Patient & Caregiver", "HCP engagement"]
+        # Ensure Sheet3 has the required columns
+        required_cols = ["Strategic Imperative", "Patient & Caregiver", "HCP Engagement"]
         if not all(col in sheet3.columns for col in required_cols):
-            st.error("Sheet3 must have columns named 'Strategic Imperative', 'Patient & Caregiver', and 'HCP engagement'.")
+            st.error("Sheet3 must have columns named 'Strategic Imperative', 'Patient & Caregiver', and 'HCP Engagement'.")
             st.stop()
         
-        # For each selected strategic imperative, get the appropriate tactic based on the user's role.
+        # For each selected strategic imperative, pull the appropriate tactic
         for imperative in selected_strategics:
             row = sheet3[sheet3["Strategic Imperative"] == imperative]
             if row.empty:
                 st.info(f"No tactic found for strategic imperative: {imperative}")
                 continue
-            # Determine tactic based on role
+            # Determine the tactic based on role selection
             if role_selected == "HCP":
-                tactic = row["HCP engagement"].iloc[0]
+                tactic = row["HCP Engagement"].iloc[0]
             else:
                 tactic = row["Patient & Caregiver"].iloc[0]
             
-            # Customize tactic with selected differentiators (if any)
+            # Optionally customize with product differentiators
             if selected_differentiators:
                 tactic_customized = f"{tactic} (Customized with: {', '.join(selected_differentiators)})"
             else:
