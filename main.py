@@ -5,9 +5,13 @@ import json
 import os
 
 # -----------------------
+# Debug: Print Current Working Directory
+# -----------------------
+st.write("Current working directory:", os.getcwd())
+
+# -----------------------
 # Secure API Key Handling
 # -----------------------
-# Load API key from Streamlit secrets or environment variable.
 if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
     openai.api_key = st.secrets["openai"]["api_key"]
 else:
@@ -18,40 +22,39 @@ else:
     openai.api_key = openai_api_key
 
 # -----------------------
-# Load Excel Data from Sheet1 (Using updated file)
+# Load Excel Data from Sheet1 (Criteria) from test.xlsx
 # -----------------------
 @st.cache_data
 def load_excel_data(filename):
     try:
-        # Read columns A through M from Sheet1.
+        # Read columns A through M from Sheet1 using header row 0
         raw_df = pd.read_excel(filename, sheet_name=0, header=0, usecols="A:M")
         st.write("Data shape (rows, columns):", raw_df.shape)
         if raw_df.shape[1] < 13:
-            st.error(f"Excel file has only {raw_df.shape[1]} column(s) but at least 13 are required.")
+            st.error(f"Excel file has only {raw_df.shape[1]} column(s) but at least 13 are required. Check file formatting.")
             return None, None, None, None
-        
-        # Extract selection options from the header row:
-        # Role options: B1 to D1 → columns index 1 to 3
+
+        # Extract selection options based on header names:
+        # Role options: cells B1 to D1 → columns index 1 to 3
         role_options = raw_df.columns[1:4].tolist()
-        # Lifecycle options: F1 to I1 → columns index 5 to 8
+        # Lifecycle options: cells F1 to I1 → columns index 5 to 8
         lifecycle_options = raw_df.columns[5:9].tolist()
-        # Journey options: J1 to M1 → columns index 9 to 12
+        # Journey options: cells J1 to M1 → columns index 9 to 12
         journey_options = raw_df.columns[9:13].tolist()
-        
-        # The strategic imperatives matrix is the data (rows 2 onward)
-        matrix_df = raw_df.copy()  # Header is already set from row 1.
-        
+
+        # The matrix data (strategic imperatives and "x" marks) are in the entire DataFrame
+        matrix_df = raw_df.copy()
+
         return role_options, lifecycle_options, journey_options, matrix_df
     except Exception as e:
         st.error(f"Error reading the Excel file: {e}")
         return None, None, None, None
 
-# Use the updated file name
-role_options, lifecycle_options, journey_options, matrix_df = load_excel_data("Pharma_Strategy_template_google.xlsx")
+role_options, lifecycle_options, journey_options, matrix_df = load_excel_data("test.xlsx")
 if role_options is None or lifecycle_options is None or journey_options is None or matrix_df is None:
     st.stop()
 
-# Debug: Display the extracted options.
+# Debug: Display the extracted selection options
 st.write("Role Options:", role_options)
 st.write("Lifecycle Options:", lifecycle_options)
 st.write("Journey Options:", journey_options)
@@ -81,7 +84,7 @@ def filter_strategic_imperatives(df, role, lifecycle, journey):
 
 def generate_ai_output(customized_result, selected_differentiators):
     """
-    Calls the OpenAI API to generate a description of the strategic recommendation,
+    Calls the OpenAI API to generate a 2-3 sentence description of the strategic recommendation,
     along with an estimated cost range and timeframe.
     Returns a dictionary with keys: "description", "cost", and "timeframe".
     """
@@ -136,8 +139,8 @@ else:
 
 # Step 3: Product Differentiators
 st.header("Step 3: Select Product Differentiators")
-# Read Sheet2 which is assumed to have a column "Product Differentiators"
-sheet2 = pd.read_excel("Pharma_Strategy_template_google.xlsx", sheet_name=1, header=0)
+# Load Sheet2 (assumed to have a column "Product Differentiators")
+sheet2 = pd.read_excel("test.xlsx", sheet_name=1, header=0)
 if "Product Differentiators" not in sheet2.columns:
     st.error("Sheet2 must have a column named 'Product Differentiators'.")
     st.stop()
@@ -150,8 +153,8 @@ if st.button("Generate Strategy"):
         st.error("Please select at least one strategic imperative.")
     else:
         st.header("Strategic Recommendations")
-        # Read Sheet3 which is assumed to have columns "Strategic Imperative" and "Result"
-        sheet3 = pd.read_excel("Pharma_Strategy_template_google.xlsx", sheet_name=2, header=0)
+        # Load Sheet3 (assumed to have columns "Strategic Imperative" and "Result")
+        sheet3 = pd.read_excel("test.xlsx", sheet_name=2, header=0)
         if "Strategic Imperative" not in sheet3.columns or "Result" not in sheet3.columns:
             st.error("Sheet3 must have columns named 'Strategic Imperative' and 'Result'.")
             st.stop()
